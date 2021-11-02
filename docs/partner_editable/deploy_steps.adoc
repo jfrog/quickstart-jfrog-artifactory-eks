@@ -12,26 +12,43 @@ Due to the underlying JSON system, the parameters for both the certificate and c
 . Remove all CRFL or LF characters, and replace them with the | (pipe) character. This puts the certificate on a single line.
 . Follow the same process for the certificate key.
 
-=== Add the license keys and certificate to AWS Secrets Manager
+=== Add the license keys to AWS Secrets Manager
 
 . Open AWS Secrets Manager in the same Region in which you deploy the Quick Start.
 . Choose Store a new secret.
 . Choose Other type of secret.
-. For the secret key value, create seven rows for the Artifactory licenses and certificate information.
-. Key names should be as follows, with the key values being Artifactory license keys and certificate details (see <<secret_manager>>)):
+. For the secret key value, create seven rows for the Artifactory licenses.
+. Key names should be as follows, with the key values being Artifactory license keys (see <<secrets_manager_licenses>>)):
 .. `ArtifactoryLicense1`
 .. `ArtifactoryLicense2`
 .. `ArtifactoryLicense3`
 .. `ArtifactoryLicense4`
+.. `ArtifactoryLicense5`
+.. `ArtifactoryLicense6`
+.. `ArtifactoryLicense7`
+
+:xrefstyle: short
+[#secrets_manager_licenses]
+.Secrets Manager key-value page
+[link=../{quickstart-project-name}/images/secrets_manager_licenses.png]
+image::../images/secrets_manager_licenses.png[image_placeholder]
+
+=== Add the certificate to AWS Secrets Manager
+
+. Open AWS Secrets Manager in the same Region in which you deploy the Quick Start.
+. Choose Store a new secret.
+. Choose Other type of secret.
+. For the secret key value, create seven rows for the certificate information.
+. Key names should be as follows, with the key values being certificate details (see <<secrets_manager_certificates>>)):
 .. `Certificate`
 .. `CertificateKey`
 .. `CertificateDomain`
 
 :xrefstyle: short
-[#secret_manager]
+[#secrets_manager_certificates]
 .Secrets Manager key-value page
-[link=../{quickstart-project-name}/images/secrets_manager.png]
-image::../images/secrets_manager.png[image_placeholder]
+[link=../{quickstart-project-name}/images/secrets_manager_certificates.png]
+image::../images/secrets_manager_certificates.png[image_placeholder]
 
 [start=6]
 . Choose *Next*.
