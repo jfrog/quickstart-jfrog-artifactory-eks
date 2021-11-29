@@ -15,14 +15,6 @@ def create(event, context):
     conn = None
     try:
         logger.info("Got Create. Connecting to db")
-        # conn = psycopg2.connect(
-        #     dbname=event['ResourceProperties']['XrayMasterDatabaseUrl'].split(
-        #         "/")[1].split("?")[0],
-        #     user=event['ResourceProperties']['DatabaseUser'],
-        #     host=event['ResourceProperties']['XrayMasterDatabaseUrl'].split(":")[
-        #         0],
-        #     password=event['ResourceProperties']['DatabasePassword']
-        # )
         conn = psycopg2.connect(
             dbname=event['ResourceProperties']['MasterDatabaseName'],
             user=event['ResourceProperties']['MasterDatabaseUser'],

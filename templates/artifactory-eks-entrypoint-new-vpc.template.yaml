@@ -45,7 +45,6 @@ Metadata:
           default: JFrog Artifactory configuration
         Parameters:
           - HelmChartVersion
-          - XrayEnabled
           - DefaultDeploymentSize
           - ArtifactoryDeploymentSize
           - NumberOfSecondary
@@ -61,6 +60,10 @@ Metadata:
           - DatabaseInstance
           - DatabaseAllocatedStorage
           - MultiAzDatabase
+      - Label:
+          default: JFrog Xray Configuration
+        Parameters:
+          - XrayEnabled
           - XrayDatabaseUser
           - XrayDatabasePassword
       - Label:
@@ -126,7 +129,7 @@ Metadata:
       HelmChartVersion:
         default: Artifactory Helm chart version
       XrayEnabled:
-        default: Xray Enabled
+        default: Install JFrog Xray
       DefaultDeploymentSize:
         default: Default Artifactory deployment size
       ArtifactoryDeploymentSize:
@@ -411,7 +414,7 @@ Parameters:
     Default: "10.0.0"
     Type: String
   XrayEnabled:
-    Description: Choose true to enable xray.If this is true then please specify xray db user name and password under RDS configuration.
+    Description: Choose true to install JFrog Xray instance(s).
     ConstraintDescription: True or False
     AllowedValues:
       - "true"
