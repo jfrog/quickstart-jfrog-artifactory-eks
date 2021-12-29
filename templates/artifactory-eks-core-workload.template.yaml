@@ -78,6 +78,16 @@ Parameters:
     Type: String
   KubeClusterName:
     Type: String
+  IronBankRegistryEnabled:
+    Type: String
+  IronBankRegistryUseraname:
+    Type: String
+  IronBankRegistryPassword:
+    Type: String
+  IronBankRegistryEmail:
+    Type: String
+Conditions:
+  IronBankEnabled: !Equals [!Ref IronBankRegistryEnabled, "true"]
 Mappings:
   DeploymentSize:
     xxxLarge:
@@ -174,7 +184,37 @@ Resources:
             Fn::Base64: !Join ["\n", "Fn::Split": ["|", !Ref Certificate]]
           tls.key:
             Fn::Base64: !Join ["\n", "Fn::Split": ["|", !Ref CertificateKey]]
-
+  RegistrySecret:
+    Condition: IronBankEnabled
+    DependsOn: NameSpace
+    Type: "Custom::KubeManifest"
+    Version: "1.0"
+    Properties:
+      ServiceToken: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:EKS-QuickStart-KubeManifest-${KubeClusterName}"
+      ClusterName: !Ref KubeClusterName
+      Manifest:
+        kind: Secret
+        apiVersion: v1
+        metadata:
+          name: artifactory-registry-secret
+          namespace: "jfrog-platform"
+          labels:
+            app: "jfrog-platform"
+            chart: "jfrog-platform"
+        type: kubernetes.io/dockerconfigjson
+        data:
+          .dockerconfigjson:
+            Fn::Base64:
+              !Join [
+                "",
+                [
+                  !Sub '{"auths":{"partnership-jfrog-artifactory.jfrog.io":{"username":"${IronBankRegistryUseraname}","password":"${IronBankRegistryPassword}","email":"${IronBankRegistryEmail}","auth":',
+                  '"',
+                  "Fn::Base64": !Sub "${IronBankRegistryUseraname}:${IronBankRegistryPassword}",
+                  '"',
+                  "}}}",
+                ],
+              ]
   LicenseStore:
     DependsOn: NameSpace
     Type: "Custom::KubeManifest"
@@ -274,9 +314,13 @@ Resources:
 
             # jfrogUrl: IngressHostName
             # jfrogUrlUI: IngressHostName
-
             masterKey: ${MasterKey}
             joinKey: ${MasterKey}
+            #Added For Ironbank Changes Start
+            imagePullSecrets: 
+              - artifactory-registry-secret
+            imageRegistry: ""
+            #Added For Ironbank Changes End
             database:
               type: ${DatabaseType}
               driver: ${DatabaseDriver}
@@ -296,8 +340,14 @@ Resources:
             customCertificates:
               enabled: false
           artifactory:
+            #Added For Ironbank Changes Start
+            artifactory:
+              image:
+                registry: partnership-jfrog-artifactory.jfrog.io
+                repository: dccscr/artifactory-pro-rh
+                tag: 7.21.7
+            #Added For Ironbank Changes End
             enabled: true
-            name: artifactory-ha
             deleteDBPropertiesOnStartup: true
             license:
               secret: artifactory-cluster-license

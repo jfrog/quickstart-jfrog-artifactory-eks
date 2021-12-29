@@ -583,6 +583,11 @@ Parameters:
     Default: "us-east-1"
     Description: AWS Region where the Quick Start S3 bucket (QSS3BucketName) is hosted. When using your own bucket, you must specify this value.
     Type: String
+  IronBankRegistryEnabled:
+    Type: String
+  IronBankRegistrySecret:
+    Default: ""
+    Type: String
 Conditions:
   BastionSecurityGroup: !Equals [!Ref "ProvisionBastionHost", "Enabled"]
   DefaultSize: !Equals [!Ref DefaultDeploymentSize, "true"]
@@ -867,6 +872,10 @@ Resources:
             !Ref ArtifactoryDeploymentSize,
           ]
         KubeClusterName: !GetAtt EKSStack.Outputs.EKSClusterName
+        IronBankRegistryEnabled: !Ref IronBankRegistryEnabled
+        IronBankRegistryUseraname: !Sub "{{resolve:secretsmanager:${IronBankRegistrySecret}:SecretString:username}}"
+        IronBankRegistryPassword: !Sub "{{resolve:secretsmanager:${IronBankRegistrySecret}:SecretString:password}}"
+        IronBankRegistryEmail: !Sub "{{resolve:secretsmanager:${IronBankRegistrySecret}:SecretString:email}}"
 Outputs:
   ArtifactoryUrl:
     Value: !GetAtt ArtifactoryCoreStack.Outputs.ArtifactoryUrl
