@@ -29,24 +29,32 @@ Parameters:
     Type: String
   ArtifactoryIamAcessKey:
     Type: String
-    NoEcho: 'true'
+    NoEcho: "true"
   SecretAccessKey:
     Type: String
-    NoEcho: 'true'
+    NoEcho: "true"
   ArtifactoryS3Bucket:
     Type: String
   CertificateKey:
     Type: String
-    NoEcho: 'true'
+    NoEcho: "true"
   Certificate:
     Type: String
   DatabaseUser:
     Type: String
-    NoEcho: 'true'
+    NoEcho: "true"
   DatabasePassword:
     Type: String
-    NoEcho: 'true'
+    NoEcho: "true"
   DatabaseUrl:
+    Type: String
+  XrayDatabaseUser:
+    Type: String
+    NoEcho: "true"
+  XrayDatabasePassword:
+    Type: String
+    NoEcho: "true"
+  XrayDatabaseUrl:
     Type: String
   DatabaseHost:
     Type: String
@@ -60,8 +68,11 @@ Parameters:
     Type: String
   MasterKey:
     Type: String
-    NoEcho: 'true'
+    NoEcho: "true"
   HelmChartVersion:
+    Type: String
+  XrayEnabled:
+    Default: "false"
     Type: String
   ArtifactoryDeploymentSize:
     Type: String
@@ -129,7 +140,7 @@ Mappings:
 Resources:
   NameSpace:
     Type: "Custom::KubeManifest"
-    Version: '1.0'
+    Version: "1.0"
     Properties:
       ServiceToken: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:EKS-QuickStart-KubeManifest-${KubeClusterName}"
       ClusterName: !Ref KubeClusterName
@@ -144,7 +155,7 @@ Resources:
   CertificateStore:
     DependsOn: NameSpace
     Type: "Custom::KubeManifest"
-    Version: '1.0'
+    Version: "1.0"
     Properties:
       ServiceToken: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:EKS-QuickStart-KubeManifest-${KubeClusterName}"
       ClusterName: !Ref KubeClusterName
@@ -160,16 +171,14 @@ Resources:
         type: kubernetes.io/tls
         data:
           tls.crt:
-            Fn::Base64:
-              !Join ["\n", "Fn::Split": ["|", !Ref Certificate]]
+            Fn::Base64: !Join ["\n", "Fn::Split": ["|", !Ref Certificate]]
           tls.key:
-            Fn::Base64:
-              !Join ["\n", "Fn::Split": ["|", !Ref CertificateKey]]
+            Fn::Base64: !Join ["\n", "Fn::Split": ["|", !Ref CertificateKey]]
 
   LicenseStore:
     DependsOn: NameSpace
     Type: "Custom::KubeManifest"
-    Version: '1.0'
+    Version: "1.0"
     Properties:
       ServiceToken: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:EKS-QuickStart-KubeManifest-${KubeClusterName}"
       ClusterName: !Ref KubeClusterName
@@ -184,8 +193,7 @@ Resources:
             chart: "jfrog-platform"
         type: Opaque
         stringData:
-          art.lic: !Sub
-            >-
+          art.lic: !Sub >-
             ${ArtifactoryLicense1}
 
 
@@ -208,7 +216,7 @@ Resources:
   SecureStoreDatabase:
     DependsOn: NameSpace
     Type: "Custom::KubeManifest"
-    Version: '1.0'
+    Version: "1.0"
     Properties:
       ServiceToken: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:EKS-QuickStart-KubeManifest-${KubeClusterName}"
       ClusterName: !Ref KubeClusterName
@@ -224,14 +232,17 @@ Resources:
         type: Opaque
         data:
           db-user:
-            Fn::Base64:
-              !Sub ${DatabaseUser}
+            Fn::Base64: !Sub ${DatabaseUser}
           db-password:
-            Fn::Base64:
-              !Sub ${DatabasePassword}
+            Fn::Base64: !Sub ${DatabasePassword}
           db-url:
-            Fn::Base64:
-              !Sub ${DatabaseUrl}
+            Fn::Base64: !Sub ${DatabaseUrl}
+          xray-db-user:
+            Fn::Base64: !Sub ${XrayDatabaseUser}
+          xray-db-password:
+            Fn::Base64: !Sub ${XrayDatabasePassword}
+          xray-db-url:
+            Fn::Base64: !Sub ${XrayDatabaseUrl}
 
   ArtifactoryDeployment:
     Type: "AWSQS::Kubernetes::Helm"
@@ -398,7 +409,7 @@ Resources:
               loadBalancerSourceRanges:  [ "${AccessCidr}" ]
             tlsSecretName: artifactory-nginx-tls
           xray:
-            enabled: false
+            enabled: ${XrayEnabled}
             postgresql:
               enabled: false
             database:
@@ -407,15 +418,15 @@ Resources:
               secrets:
                 user:
                   name: artifactory-cluster-db
-                  key: "db-user"
+                  key: "xray-db-user"
                 password:
                   name: artifactory-cluster-db
-                  key: "db-password"
+                  key: "xray-db-password"
                 url:
                   name: artifactory-cluster-db
-                  key: "db-url"
+                  key: "xray-db-url"
           rabbitmq:
-            enabled: false
+            enabled: ${XrayEnabled}
           postgresql:
             enabled: false
           redis:
@@ -429,23 +440,53 @@ Resources:
           insight:
             enabled: false
         - {
-           requests_memory: !FindInMap [DeploymentSize, !Ref ArtifactoryDeploymentSize, requestsMem],
-           requests_cpu: !FindInMap [DeploymentSize, !Ref ArtifactoryDeploymentSize, requestsCpu],
-           limits_memory: !FindInMap [DeploymentSize, !Ref ArtifactoryDeploymentSize, limitsMem],
-           limits_cpu: !FindInMap [DeploymentSize, !Ref ArtifactoryDeploymentSize, limitsCpu],
-           java_xms: !FindInMap [DeploymentSize, !Ref ArtifactoryDeploymentSize, javaOptsXms],
-           java_xmx: !FindInMap [DeploymentSize, !Ref ArtifactoryDeploymentSize, javaOptsXmx],
+            requests_memory:
+              !FindInMap [
+                DeploymentSize,
+                !Ref ArtifactoryDeploymentSize,
+                requestsMem,
+              ],
+            requests_cpu:
+              !FindInMap [
+                DeploymentSize,
+                !Ref ArtifactoryDeploymentSize,
+                requestsCpu,
+              ],
+            limits_memory:
+              !FindInMap [
+                DeploymentSize,
+                !Ref ArtifactoryDeploymentSize,
+                limitsMem,
+              ],
+            limits_cpu:
+              !FindInMap [
+                DeploymentSize,
+                !Ref ArtifactoryDeploymentSize,
+                limitsCpu,
+              ],
+            java_xms:
+              !FindInMap [
+                DeploymentSize,
+                !Ref ArtifactoryDeploymentSize,
+                javaOptsXms,
+              ],
+            java_xmx:
+              !FindInMap [
+                DeploymentSize,
+                !Ref ArtifactoryDeploymentSize,
+                javaOptsXmx,
+              ],
           }
   IngressHostName:
     DependsOn: ArtifactoryDeployment
     Type: "Custom::KubeGet"
-    Version: '1.0'
+    Version: "1.0"
     Properties:
       ServiceToken: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:EKS-QuickStart-KubeGet-${KubeClusterName}"
       ClusterName: !Ref KubeClusterName
       Namespace: "jfrog-platform"
       Name: svc/quickstart-jfrog-platform-artifactory-nginx
-      JsonPath: '{.status.loadBalancer.ingress[0].hostname}'
+      JsonPath: "{.status.loadBalancer.ingress[0].hostname}"
 Outputs:
   ArtifactoryUrl:
     Value: !Sub "https://${IngressHostName}"

@@ -1,5 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'JFrog Artifactory Quick Start Deployment (qs-1qpmmjh61)'
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "JFrog Artifactory Quick Start Deployment (qs-1qpmmjh61)"
 Metadata:
   cfn-lint:
     config:
@@ -41,7 +41,12 @@ Parameters:
   DatabaseUser:
     Type: String
   DatabasePassword:
-    NoEcho: 'true'
+    NoEcho: "true"
+    Type: String
+  XrayDatabaseUser:
+    Type: String
+  XrayDatabasePassword:
+    NoEcho: "true"
     Type: String
   DatabaseInstance:
     Type: String
@@ -50,6 +55,34 @@ Parameters:
   InstanceType:
     Default: m4.xlarge
     Type: String
+  XrayEnabled:
+    Default: "false"
+    Type: String
+  QSS3BucketName:
+    Description:
+      S3 bucket name for the Quick Start assets. This string can include
+      numbers, lowercase letters, and hyphens (-). It cannot start
+      or end with a hyphen (-).
+    AllowedPattern: ^[0-9a-z]+([0-9a-z-]*[0-9a-z])*$
+    ConstraintDescription:
+      Quick Start bucket name can include numbers, lowercase
+      letters, and hyphens (-). It cannot start or end with a hyphen (-).
+    Default: aws-quickstart
+    Type: String
+  QSS3KeyPrefix:
+    Description:
+      S3 key prefix for the Quick Start assets. Quick Start key prefix
+      can include numbers, lowercase letters, uppercase letters, hyphens (-), and
+      forward slash (/).
+    AllowedPattern: ^[0-9a-zA-Z-/]*$
+    ConstraintDescription:
+      Quick Start key prefix can include numbers, lowercase letters,
+      uppercase letters, hyphens (-), and forward slash (/).
+    Default: quickstart-jfrog-artifactory-eks/
+    Type: String
+Conditions:
+  UsingDefaultBucket: !Equals [!Ref QSS3BucketName, "aws-quickstart"]
+  CreateXray: !Equals [!Ref XrayEnabled, "true"]
 
 Mappings:
   JavaOptionstoInstance:
@@ -223,7 +256,7 @@ Resources:
       MasterUserPassword: !Ref DatabasePassword
       DBInstanceClass: !Ref DatabaseInstance
       DBName: !Ref DatabaseName
-      DBSubnetGroupName: !Ref  ArtifactoryDatabaseSubnetGroup
+      DBSubnetGroupName: !Ref ArtifactoryDatabaseSubnetGroup
       VPCSecurityGroups:
         - !Ref ArtifactoryDatabaseSG
   ArtifactoryDatabaseSG:
@@ -264,6 +297,84 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
+  XrayLambdaSG:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateXray
+    Properties:
+      Tags:
+        - Key: Name
+          Value: xray-lambda-sg
+      GroupDescription: SG for Lambda to connect to RDS
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref PrivateSubnet1Cidr
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref PrivateSubnet2Cidr
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref PrivateSubnet3Cidr
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+  XrayLambdaRole:
+    Type: AWS::IAM::Role
+    Condition: CreateXray
+    Properties:
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+  XrayLambda:
+    Type: "AWS::Lambda::Function"
+    Condition: CreateXray
+    Properties:
+      Description: Creates Xray database.
+      Handler: lambda_function.handler
+      Runtime: python3.7
+      Role: !GetAtt "XrayLambdaRole.Arn"
+      Code:
+        S3Bucket:
+          !If [
+            UsingDefaultBucket,
+            !Sub "${QSS3BucketName}-${AWS::Region}",
+            !Ref QSS3BucketName,
+          ]
+        S3Key: !Sub "${QSS3KeyPrefix}functions/packages/xray-db/lambda.zip"
+      Timeout: 900
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref "XrayLambdaSG"
+        SubnetIds: !Ref SubnetIds
+  XrayDatabase:
+    Type: "Custom::XrayDatabase"
+    Condition: CreateXray
+    Properties:
+      ServiceToken: !GetAtt XrayLambda.Arn
+      MasterDatabaseName: !Ref DatabaseName
+      MasterDatabaseUser: !Ref DatabaseUser
+      MasterDatabaseHost: !GetAtt ArtifactoryDatabase.Endpoint.Address
+      MasterDatabasePassword: !Ref DatabasePassword
+      XrayDatabaseUser: !Ref XrayDatabaseUser
+      XrayDatabasePassword: !Ref XrayDatabasePassword
+
   ArtifactoryS3IAMUser:
     Type: AWS::IAM::User
   ArtifactoryIamAcessKey:
@@ -287,7 +398,6 @@ Resources:
             - EIAMPolicyActionWildcard
           ignore_reasons:
             EIAMPolicyActionWildcard: Cant list all the S3 permissions, due to size limits. s3 get*, put*, and list* not currently supported
-
     Properties:
       PolicyName: S3BucketPermissions
       PolicyDocument:
@@ -330,14 +440,14 @@ Resources:
               - s3:UpdateJobStatus
             Resource:
               - Fn::Join:
-                - ''
-                - - !Sub "arn:${AWS::Partition}:s3:::"
-                  - !Ref ArtifactoryS3Bucket
+                  - ""
+                  - - !Sub "arn:${AWS::Partition}:s3:::"
+                    - !Ref ArtifactoryS3Bucket
               - Fn::Join:
-                - ''
-                - - !Sub "arn:${AWS::Partition}:s3:::"
-                  - !Ref ArtifactoryS3Bucket
-                  - "/*"
+                  - ""
+                  - - !Sub "arn:${AWS::Partition}:s3:::"
+                    - !Ref ArtifactoryS3Bucket
+                    - "/*"
       Users:
         - !Ref ArtifactoryS3IAMUser
 Outputs:
@@ -364,18 +474,18 @@ Outputs:
     Value: !Sub
       - "jdbc:postgresql://${ArtifactoryDatabaseEndpointAddress}:5432/${DatabaseName}"
       - {
-        ArtifactoryDatabaseEndpointAddress: !GetAtt ArtifactoryDatabase.Endpoint.Address,
+          ArtifactoryDatabaseEndpointAddress: !GetAtt ArtifactoryDatabase.Endpoint.Address,
         }
   XrayDatabaseUrl:
     Value: !Sub
-      - "${ArtifactoryDatabaseEndpointAddress}:5432/xraydb?sslmode=disable"
+      - "postgres://${ArtifactoryDatabaseEndpointAddress}:5432/xraydb?sslmode=disable"
       - ArtifactoryDatabaseEndpointAddress: !GetAtt ArtifactoryDatabase.Endpoint.Address
   JavaOpts:
     Value: !Sub
       - "-Xms${min}g -Xmx${max}g"
       - {
-        min: !FindInMap [JavaOptionstoInstance, !Ref InstanceType, Min],
-        max: !FindInMap [JavaOptionstoInstance, !Ref InstanceType, Max]
-      }
+          min: !FindInMap [JavaOptionstoInstance, !Ref InstanceType, Min],
+          max: !FindInMap [JavaOptionstoInstance, !Ref InstanceType, Max],
+        }
   DeploymentSize:
     Value: !FindInMap [JavaOptionstoInstance, !Ref InstanceType, DeploymentSize]
