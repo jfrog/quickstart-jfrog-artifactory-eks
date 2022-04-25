@@ -9,7 +9,9 @@ Metadata:
         - W9004
         - W9006
 Parameters:
-  NumberOfSecondary:
+  ArtifactoryNumberOfNodes:
+    Type: Number
+  XrayNumberOfNodes:
     Type: Number
   AccessCidr:
     Type: String
@@ -296,15 +298,73 @@ Resources:
             customCertificates:
               enabled: false
           artifactory:
+            artifactory:
+              replicaCount: ${ArtifactoryNumberOfNodes}
+              persistence:
+                enabled: false
+                local: false
+                type: aws-s3-v3
+                binarystoreXml: |
+                  <config version="2">
+                      <chain>
+                          <provider id="cache-fs-eventual-s3" type="cache-fs">
+                              <provider id="sharding-cluster-eventual-s3" type="sharding-cluster">
+                                  <sub-provider id="eventual-cluster-s3" type="eventual-cluster">
+                                      <provider id="retry-s3" type="retry">
+                                          <provider id="s3-storage-v3" type="s3-storage-v3"/>
+                                      </provider>
+                                  </sub-provider>
+                                  <dynamic-provider id="remote-s3" type="remote"/>
+                              </provider>
+                          </provider>
+                      </chain>
+                      <provider id="sharding-cluster-eventual-s3" type="sharding-cluster">
+                          <readBehavior>crossNetworkStrategy</readBehavior>
+                          <writeBehavior>crossNetworkStrategy</writeBehavior>
+                          <redundancy>3</redundancy>
+                          <property name="zones" value="local,remote"/>
+                      </provider>
+                      <provider id="remote-s3" type="remote">
+                          <zone>remote</zone>
+                      </provider>
+                      <provider id="eventual-cluster-s3" type="eventual-cluster">
+                          <zone>local</zone>
+                      </provider>
+                      <provider id="cache-fs-eventual-s3" type="cache-fs">
+                          <maxCacheSize>5e+10</maxCacheSize>
+                          <cacheProviderDir>cache</cacheProviderDir>
+                      </provider>
+                      <provider id="s3-storage-v3" type="s3-storage-v3">
+                          <testConnection>false</testConnection>
+                          <identity>${ArtifactoryIamAcessKey}</identity>
+                          <credential>${SecretAccessKey}</credential>
+                          <region>${AWS::Region}</region>
+                          <bucketName>${ArtifactoryS3Bucket}</bucketName>
+                          <path>artifactory/filestore</path>
+                          <endpoint></endpoint>
+                          <useInstanceCredentials>false</useInstanceCredentials>
+                          <usePresigning>false</usePresigning>
+                          <signatureExpirySeconds>300</signatureExpirySeconds>
+                      </provider>
+                  </config>
+              resources:
+                requests:
+                  memory: "${requests_memory}"
+                  cpu: "${requests_cpu}"
+                limits:
+                  memory: "${limits_memory}"
+                  cpu: "${limits_cpu}"
+              javaOpts:
+                xms: "${java_xms}"
+                xmx: "${java_xmx}"
+            installerInfo: '{"productId": "CloudFormation_artifactory-ha/1.0.0","features": [{"featureId": "Partner/ACC-006973"}]}'
             enabled: true
-            name: artifactory-ha
             deleteDBPropertiesOnStartup: true
             license:
               secret: artifactory-cluster-license
               dataKey: art.lic
             preStartCommand: mkdir -p /var/opt/jfrog/artifactory/etc/artifactory/info/; mkdir -p /var/opt/jfrog/artifactory/bootstrap/artifactory/tomcat/lib/; curl ${DatabasePluginUrl} --output /var/opt/jfrog/artifactory/bootstrap/artifactory/tomcat/lib/${DatabasePlugin}
             waitForDatabase: false
-            installerInfo: '{"productId": "CloudFormation_artifactory-ha/1.0.0","features": [{"featureId": "Partner/ACC-006973"}]}'
             postgresql:
               enabled: false
             database:
@@ -320,86 +380,6 @@ Resources:
                 url:
                   name: artifactory-cluster-db
                   key: "db-url"
-
-            persistence:
-              enabled: false
-              local: false
-              type: aws-s3-v3
-              binarystoreXml: |
-                <config version="2">
-                    <chain>
-                        <provider id="cache-fs-eventual-s3" type="cache-fs">
-                            <provider id="sharding-cluster-eventual-s3" type="sharding-cluster">
-                                <sub-provider id="eventual-cluster-s3" type="eventual-cluster">
-                                    <provider id="retry-s3" type="retry">
-                                        <provider id="s3-storage-v3" type="s3-storage-v3"/>
-                                    </provider>
-                                </sub-provider>
-                                <dynamic-provider id="remote-s3" type="remote"/>
-                            </provider>
-                        </provider>
-                    </chain>
-                    <provider id="sharding-cluster-eventual-s3" type="sharding-cluster">
-                        <readBehavior>crossNetworkStrategy</readBehavior>
-                        <writeBehavior>crossNetworkStrategy</writeBehavior>
-                        <redundancy>3</redundancy>
-                        <property name="zones" value="local,remote"/>
-                    </provider>
-                    <provider id="remote-s3" type="remote">
-                        <zone>remote</zone>
-                    </provider>
-                    <provider id="eventual-cluster-s3" type="eventual-cluster">
-                        <zone>local</zone>
-                    </provider>
-                    <provider id="cache-fs-eventual-s3" type="cache-fs">
-                        <maxCacheSize>5e+10</maxCacheSize>
-                        <cacheProviderDir>cache</cacheProviderDir>
-                    </provider>
-                    <provider id="s3-storage-v3" type="s3-storage-v3">
-                        <testConnection>false</testConnection>
-                        <identity>${ArtifactoryIamAcessKey}</identity>
-                        <credential>${SecretAccessKey}</credential>
-                        <region>${AWS::Region}</region>
-                        <bucketName>${ArtifactoryS3Bucket}</bucketName>
-                        <path>artifactory/filestore</path>
-                        <endpoint></endpoint>
-                        <useInstanceCredentials>false</useInstanceCredentials>
-                        <usePresigning>false</usePresigning>
-                        <signatureExpirySeconds>300</signatureExpirySeconds>
-                    </provider>
-                </config>
-            service:
-              pool: all
-            primary:
-              resources:
-                requests:
-                  memory: "${requests_memory}"
-                  cpu: "${requests_cpu}"
-                limits:
-                  memory: "${limits_memory}"
-                  cpu: "${limits_cpu}"
-              javaOpts:
-                xms: "${java_xms}"
-                xmx: "${java_xmx}"
-              nodeSelector:
-                partition: JFrog-Artifactory-Pro
-            node:
-              replicaCount: ${NumberOfSecondary}
-              resources:
-                requests:
-                  memory: "${requests_memory}"
-                  cpu: "${requests_cpu}"
-                limits:
-                  memory: "${limits_memory}"
-                  cpu: "${limits_cpu}"
-              javaOpts:
-                xms: "${java_xms}"
-                xmx: "${java_xmx}"
-              nodeSelector:
-                partition: JFrog-Artifactory-Pro-secondary
-              podAntiAffinity:
-                type: "soft"
-                topologyKey: "kubernetes.io/hostname"
           postgresql:
             enabled: false
           nginx:
@@ -410,6 +390,7 @@ Resources:
             tlsSecretName: artifactory-nginx-tls
           xray:
             enabled: ${XrayEnabled}
+            replicaCount: ${XrayNumberOfNodes}
             postgresql:
               enabled: false
             database:
@@ -427,8 +408,7 @@ Resources:
                   key: "xray-db-url"
           rabbitmq:
             enabled: ${XrayEnabled}
-          postgresql:
-            enabled: false
+            replicaCount: ${XrayNumberOfNodes}
           redis:
             enabled: false
           distribution:
