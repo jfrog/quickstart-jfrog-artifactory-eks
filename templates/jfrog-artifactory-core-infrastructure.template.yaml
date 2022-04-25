@@ -251,7 +251,7 @@ Resources:
       MultiAZ: !Ref MultiAzDatabase
       Engine: "Postgres"
       PubliclyAccessible: false
-      EngineVersion: "11.5"
+      EngineVersion: "11.14"
       MasterUsername: !Ref DatabaseUser
       MasterUserPassword: !Ref DatabasePassword
       DBInstanceClass: !Ref DatabaseInstance
